@@ -192,7 +192,11 @@ export function openAIToGemini(body: OpenAIChatRequest): GeminiRequestPayload {
   if (typeof body.temperature === "number") generationConfig.temperature = body.temperature;
   if (typeof body.top_p === "number") generationConfig.topP = body.top_p;
   const maxOutput = body.max_completion_tokens ?? body.max_tokens;
-  if (typeof maxOutput === "number") generationConfig.maxOutputTokens = maxOutput;
+  if (typeof maxOutput === "number") {
+    // OpenAI clients (like Zed) often forward their context-window size as max_tokens.
+    // Upstream Antigravity rejects maxOutputTokens exceeding the model's output ceiling (64k).
+    generationConfig.maxOutputTokens = Math.min(maxOutput, 64000);
+  }
   if (body.stop) generationConfig.stopSequences = Array.isArray(body.stop) ? body.stop : [body.stop];
   if (Object.keys(generationConfig).length > 0) payload.generationConfig = generationConfig;
 

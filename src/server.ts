@@ -254,7 +254,7 @@ async function handleChat(req: IncomingMessage, res: ServerResponse): Promise<vo
 /** Returns "retry" when the failure is a recoverable thinking-block error. */
 async function maybeThinkingRecovery(upstream: Response): Promise<"retry" | "no"> {
   try {
-    const text = await upstream.text();
+    const text = await upstream.clone().text();
     const message = extractErrorMessage(text);
     return detectErrorType(message) === "thinking_block_order" ? "retry" : "no";
   } catch {
