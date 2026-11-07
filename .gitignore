@@ -1,0 +1,9 @@
+node_modules/
+dist/
+*.log
+.DS_Store
+
+# OAuth client credentials (public upstream constants) are fetched at
+# install time via postinstall; they cannot live in git because GitHub
+# push protection flags them. See scripts/fetch-upstream-constants.mjs.
+vendor/auth-src/constants.ts

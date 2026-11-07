@@ -1,0 +1,26 @@
+{
+  "language_models": {
+    "openai_compatible": {
+      "antigravity": {
+        "api_url": "http://127.0.0.1:8123/v1",
+        "available_models": [
+          {
+            "name": "gemini-3.8-flash-high",
+            "display_name": "Antigravity Gemini 3.8 Flash",
+            "max_tokens": 1000000
+          },
+          {
+            "name": "gemini-4-argon-high",
+            "display_name": "Antigravity Gemini 4 Argon",
+            "max_tokens": 1000000
+          },
+          {
+            "name": "claude-sonnet-5-5-high",
+            "display_name": "Antigravity Sonnet 5.5",
+            "max_tokens": 200000
+          }
+        ]
+      }
+    }
+  }
+}

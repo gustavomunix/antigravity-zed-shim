@@ -1,0 +1,39 @@
+{
+  "name": "antigravity-zed-shim",
+  "version": "0.1.0",
+  "description": "Local OpenAI-compatible proxy that exposes Google Antigravity accounts (OAuth) to Zed Agent via settings.json",
+  "type": "module",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/gustavomunix/antigravity-zed-shim.git"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "scripts": {
+    "build": "esbuild src/cli.ts --bundle --platform=node --format=esm --outfile=dist/cli.js --external:proper-lockfile --sourcemap --log-level=warning",
+    "preserve": "npm run build",
+    "serve": "node dist/cli.js serve",
+    "prelogin": "npm run build",
+    "login": "node dist/cli.js login",
+    "premodels": "npm run build",
+    "models": "node dist/cli.js models",
+    "preself-test": "npm run build",
+    "self-test": "node dist/cli.js self-test",
+    "typecheck": "tsc --noEmit",
+    "postinstall": "node scripts/fetch-upstream-constants.mjs",
+    "sync-vendor": "node scripts/fetch-upstream-constants.mjs"
+  },
+  "dependencies": {
+    "@openauthjs/openauth": "^0.4.3",
+    "proper-lockfile": "^4.1.2",
+    "zod": "^4.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^24.10.1",
+    "@types/proper-lockfile": "^4.1.4",
+    "esbuild": "^0.28.2",
+    "typescript": "^5.0.0"
+  }
+}
