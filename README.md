@@ -57,6 +57,38 @@ non-empty key for `openai_compatible` providers. Either:
 Pick an `Antigravity …` model in the Agent Panel model dropdown. Done —
 Zed Agent, Inline Assistant and friends now run on your Antigravity quota.
 
+## Run at login
+
+The proxy is idle most of the time and only listens on `127.0.0.1`, so
+autostart is cheap.
+
+### macOS
+
+```sh
+sh scripts/install-mac.sh             # npm install + build + register LaunchAgent
+sh scripts/install-mac.sh uninstall   # remove it
+```
+
+Installs a per-user LaunchAgent (`dev.antigravity-zed-shim`,
+no root): starts at login, restarts on crash (30s throttle), runs at
+background priority. Logs: `~/Library/Logs/antigravity-zed-shim/`. Set
+`PORT=N` to change the port. Re-run the script after changing the code.
+
+Restart manually:
+`launchctl kickstart -k gui/$(id -u)/dev.antigravity-zed-shim`
+
+### Windows
+
+Copy a shortcut to `start-windows.cmd` into `shell:startup` (Win+R). It
+builds on first run and starts the proxy minimized on port 8123.
+
+### Models
+
+Neither installer touches Zed's `settings.json` and there is no hardcoded
+model list. `npm run models` queries the live catalog every time and prints
+the block to paste, so a fresh install never gets retired models. Re-run it
+when new models ship.
+
 ## Commands
 
 | Command           | What it does                                              |

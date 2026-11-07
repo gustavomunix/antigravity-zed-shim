@@ -65,7 +65,7 @@ async function printModelsSnippet(): Promise<void> {
   const snippet = {
     language_models: {
       openai_compatible: {
-        antigravity: {
+        Antigravity: {
           api_url: "http://127.0.0.1:8123/v1",
           available_models: models.map((m) => ({
             name: m.id,
