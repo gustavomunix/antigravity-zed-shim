@@ -67,6 +67,13 @@ Zed Agent, Inline Assistant and friends now run on your Antigravity quota.
 | `npm run self-test` | Offline translator unit checks (no network)             |
 | `npm run typecheck` | `tsc --noEmit`                                          |
 
+### Windows Background Helpers
+
+- `start-silent.vbs`: Starts the proxy completely hidden in the background (zero windows, no taskbar item). Place a shortcut to this in `shell:startup` for automatic silent boot.
+- `stop-windows.cmd`: Stops any process running on port 8123.
+- `start-windows.cmd`: Starts the proxy in a minimized console window.
+
+
 `GET /health` returns `{status, accounts, emails}` for diagnostics.
 
 ## Multi-account / quota notes
