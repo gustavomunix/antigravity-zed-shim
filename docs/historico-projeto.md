@@ -83,16 +83,32 @@ Processo Node local que expõe OpenAI-compatível e traduz nos dois sentidos.
 3. **`proper-lockfile` (CJS com require dinâmico)** quebrava o bundle ESM → marcado como `--external`.
 4. **`write after end`** no relay SSE: `finishWithUsage()` e o driver chamavam `res.end()` duas vezes → um `finish()` só.
 5. **Usage zerado no stream**: `thoughtsTokenCount` não somado → incluído em `completion_tokens`.
-6. **Push rejeitado (GH013)**: client ID OAuth no vendor → `constants.ts` fora do git + fetch pinado no `postinstall`.
+8. **Push rejeitado (GH013)**: client ID OAuth no vendor → `constants.ts` fora do git + fetch pinado no `postinstall`.
+7. **Upstream 400 com `max_tokens` gigante**: o Zed repassa a janela de contexto configurada no `settings.json` (1M) como `max_tokens` na requisição; o Google rejeita `maxOutputTokens > 64000` → `src/translate.ts` limita a 64k (`Math.min(maxOutput, 64000)`).
+8. **"Connection interrupted" no Zed SSE**: o shim emitia chunk final só para `usage` com `choices: []`; o deserializador Rust do Zed abortava a conexão → `src/server.ts` unificou `finish_reason: "stop"` e `usage` no mesmo chunk oficial.
+9. **Proto field not repeating (tools com type array)**: o Zed envia schemas JSON com tipos anuláveis como array (`type: ["string", "null"]`), rejeitado pelo Protobuf do Google → integrado `cleanJSONSchemaForAntigravity` em `src/translate.ts` para achatar tipos e limpar palavras-chave incompatíveis.
 
-## 7. Validação executada
+## 7. Compatibilidade entre plataformas
+
+O shim é **100% multiplataforma (macOS, Linux, Windows)**:
+- **Node.js ≥ 20**: execução idêntica via `dist/cli.js`.
+- **Credenciais**: `~/.config/opencode/antigravity-accounts.json` no Mac/Linux (padrão XDG) e `%USERPROFILE%\.config\opencode\` no Windows.
+- **Zed `settings.json`**:
+  - Mac: `~/Library/Application Support/Zed/settings.json` (ou `~/.config/zed/settings.json`)
+  - Linux: `~/.config/zed/settings.json`
+  - Windows: `%APPDATA%\Zed\settings.json`
+- **Autostart**:
+  - Windows: atalho do `start-windows.cmd` em `shell:startup`.
+  - Mac/Linux: via `launchd` plist, serviço systemd de usuário ou `pm2`.
+
+## 8. Validação executada
 
 - `tsc --noEmit` limpo; `self-test` offline (tradução ida/volta, envelope, SSE, shapes OpenAI).
 - Ao vivo com a conta do usuário: `/health`, `/v1/models` (22 modelos),
   chat non-stream + stream (`finish_reason`/`usage`/`[DONE]`), **tool calling
   completo** (`calc` → `tool_calls`, `finish_reason: tool_calls`).
 
-## 8. ACP oficial (investigação paralela)
+## 9. ACP oficial (investigação paralela)
 
 - `antigravity-acp` existe no ACP Registry (v1.4.5, binário por plataforma).
 - `{"auth": {"type": "oauth-personal"}}` **não existe** em nenhum schema do
@@ -104,7 +120,7 @@ Processo Node local que expõe OpenAI-compatível e traduz nos dois sentidos.
   `agent_servers` custom ou via Registry), mas **não** alimenta o Zed Agent.
   Complementar ao shim, não concorrente.
 
-## 9. Provider nativo em Rust (implementado, depois revertido)
+## 10. Provider nativo em Rust (implementado, depois revertido)
 
 Foi implementado `crates/language_models/src/provider/antigravity.rs`
 (~1100 linhas): reuso de `into_google` + `GoogleEventMapper`, envelope
@@ -123,14 +139,14 @@ Validação: `cargo check` em `language_model_core`, `settings_content`,
 instalado normalmente, e provider nativo = fork + build do editor.
 Mapeamento preservado nesta doc para reaplicação futura.
 
-## 10. Estado final
+## 11. Estado final
 
 - Repo publicado: `github.com/gustavomunix/antigravity-zed-shim` (público, MIT).
 - `labs/` contém só clones de referência (ignorados).
 - Uso: `start-windows.cmd` (ou `npm run serve`) + bloco `openai_compatible`
   no `settings.json` (gerado por `npm run models`) + chave dummy no provider.
 
-## 11. Lições
+## 12. Lições
 
 - O protocolo real só existia no código do plugin comunitário — a doc
   oficial do Google não cobre nada; source-first foi a abordagem correta.

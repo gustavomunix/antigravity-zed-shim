@@ -19,8 +19,9 @@ How it works:
 
 ## Prerequisites
 
-- Node.js ≥ 20.
+- Node.js ≥ 20 (macOS, Linux, or Windows).
 - A Google account with Antigravity access.
+
 
 ## Setup
 

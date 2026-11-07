@@ -436,16 +436,27 @@ async function relayStream(
   }
 
   function finishWithUsage(): void {
-    emit(
-      openAIStreamChunk(
-        id,
-        created,
-        requestedModel,
-        {},
-        mapFinishReason(finishReason, toolIndexById.size > 0),
-      ),
-    );
-    if (usage) emit(openAIUsageChunk(id, created, requestedModel, usage));
+    const finalChunk: Record<string, unknown> = {
+      id,
+      object: "chat.completion.chunk",
+      created,
+      model: requestedModel,
+      choices: [
+        {
+          index: 0,
+          delta: {},
+          finish_reason: mapFinishReason(finishReason, toolIndexById.size > 0),
+        },
+      ],
+    };
+    if (usage) {
+      finalChunk.usage = {
+        prompt_tokens: usage.promptTokens ?? 0,
+        completion_tokens: usage.completionTokens ?? 0,
+        total_tokens: usage.totalTokens ?? (usage.promptTokens ?? 0) + (usage.completionTokens ?? 0),
+      };
+    }
+    emit(JSON.stringify(finalChunk));
   }
 
 }

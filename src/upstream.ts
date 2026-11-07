@@ -38,6 +38,10 @@ export {
   invalidateProjectContextCache,
 } from "../vendor/auth-src/plugin/project";
 
+export {
+  cleanJSONSchemaForAntigravity,
+} from "../vendor/auth-src/plugin/request-helpers";
+
 export { prepareAntigravityRequest } from "../vendor/auth-src/plugin/request";
 
 export { detectErrorType } from "../vendor/auth-src/plugin/recovery";

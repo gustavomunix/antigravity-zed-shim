@@ -12,6 +12,8 @@
  * `{response: {candidates: [...], usageMetadata: {...}}}`.
  */
 
+import { cleanJSONSchemaForAntigravity } from "./upstream";
+
 export interface OpenAIToolCall {
   id: string;
   type: "function";
@@ -170,7 +172,9 @@ export function openAIToGemini(body: OpenAIChatRequest): GeminiRequestPayload {
       .map((tool) => ({
         name: tool.function.name,
         description: tool.function.description ?? "",
-        parameters: tool.function.parameters ?? { type: "object", properties: {} },
+        parameters: cleanJSONSchemaForAntigravity(
+          tool.function.parameters ?? { type: "object", properties: {} },
+        ) as Record<string, unknown>,
       })) ?? [];
   if (declarations.length > 0) {
     payload.tools = [{ functionDeclarations: declarations }];
@@ -367,7 +371,7 @@ export function openAIUsageChunk(
     object: "chat.completion.chunk",
     created,
     model,
-    choices: [],
+    choices: [{ index: 0, delta: {}, finish_reason: null }],
     usage: {
       prompt_tokens: usage.promptTokens ?? 0,
       completion_tokens: usage.completionTokens ?? 0,
