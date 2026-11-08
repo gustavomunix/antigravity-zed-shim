@@ -7,17 +7,44 @@
           {
             "name": "gemini-3.8-flash-high",
             "display_name": "Antigravity Gemini 3.8 Flash",
-            "max_tokens": 1000000
+            "max_tokens": 1000000,
+            "capabilities": {
+              "tools": true,
+              "images": true,
+              "parallel_tool_calls": false,
+              "prompt_cache_key": false,
+              "chat_completions": true,
+              "interleaved_reasoning": false,
+              "max_tokens_parameter": false
+            }
           },
           {
             "name": "gemini-4-argon-high",
             "display_name": "Antigravity Gemini 4 Argon",
-            "max_tokens": 1000000
+            "max_tokens": 1000000,
+            "capabilities": {
+              "tools": true,
+              "images": true,
+              "parallel_tool_calls": false,
+              "prompt_cache_key": false,
+              "chat_completions": true,
+              "interleaved_reasoning": false,
+              "max_tokens_parameter": false
+            }
           },
           {
             "name": "claude-sonnet-5-5-high",
             "display_name": "Antigravity Sonnet 5.5",
-            "max_tokens": 200000
+            "max_tokens": 200000,
+            "capabilities": {
+              "tools": true,
+              "images": true,
+              "parallel_tool_calls": false,
+              "prompt_cache_key": false,
+              "chat_completions": true,
+              "interleaved_reasoning": false,
+              "max_tokens_parameter": false
+            }
           }
         ]
       }
