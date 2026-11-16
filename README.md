@@ -94,14 +94,44 @@ model list. `npm run models` queries the live catalog every time and prints
 the block to paste, so a fresh install never gets retired models. Re-run it
 when new models ship.
 
-The catalog lists one id per effort (`gemini-3.8-flash-low`, `-medium`,
-`-high`). The shim folds them into one model (`gemini-3.8-flash`) with
-`reasoning_effort_levels`, so Zed shows an effort selector. Each request
-maps `reasoning_effort` back to the matching id; without it, `high` is used
-(or the strongest level if there is no `high`). A level the model lacks
-falls to the nearest lower one. Single-variant ids such as
-`gpt-oss-120b-medium` and `-tiered` ids stay as they are. The raw ids keep
-working.
+### Reasoning effort
+
+Antigravity has no effort parameter: the catalog lists one id per effort
+(`gemini-3.8-flash-low`, `-medium`, `-high`), and the suffix is part of the
+real model id. The shim folds every family with two or more variants into one
+model (`gemini-3.8-flash`) with `reasoning_effort_levels`, so Zed shows an
+effort selector. Each request maps `reasoning_effort` back to a real id:
+
+| `reasoning_effort` | `gemini-3.8-flash` (low/medium/high) | `gemini-4-hydrogen` (low/medium/high/xhigh) |
+| --- | --- | --- |
+| `minimal` | `-low` | `-low` |
+| `low` / `medium` / `high` | same level | same level |
+| `xhigh` | `-high` | `-xhigh` |
+| `max` | `-high` | `-xhigh` |
+| none or unknown | `-high` | `-high` |
+
+Rules: an exact match wins; a known level the model lacks falls to the
+nearest lower one, or to the lowest when nothing is lower (`minimal`);
+no value or an unknown one uses `high`, or the strongest level when there
+is no `high`. Zed may offer levels outside `reasoning_effort_levels`
+(`minimal`); they never fail, they map as above.
+
+Single-variant ids (`gpt-oss-120b-medium`) and `-tiered` ids stay as they
+are. The raw per-effort ids keep working. The group list comes from the
+catalog, loaded on the first chat request after a restart.
+
+### Images and files
+
+User messages accept `image_url`, `image` (base64 or `source`),
+`input_image`, `file` / `input_file` and `document` parts. Data URLs may
+carry parameters (`data:image/png;name=a.png;base64,...`). Images and PDFs
+go to the model as `inlineData`. Remote `http(s)` URLs are rejected with
+400: download the file and send it as a data URL.
+
+Tool results can carry media as a parts array or as that array
+JSON-encoded in a string. The text goes into the `functionResponse`; the
+media goes in a `user` content placed after the whole group of responses,
+so parallel tool calls stay paired with their responses.
 
 
 ## Commands

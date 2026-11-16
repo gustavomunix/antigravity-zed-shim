@@ -88,6 +88,9 @@ Processo Node local que expõe OpenAI-compatível e traduz nos dois sentidos.
 7. **Upstream 400 com `max_tokens` gigante**: o Zed repassa a janela de contexto configurada no `settings.json` (1M) como `max_tokens` na requisição; o Google rejeita `maxOutputTokens > 64000` → `src/translate.ts` limita a 64k (`Math.min(maxOutput, 64000)`).
 8. **"Connection interrupted" no Zed SSE**: o shim emitia chunk final só para `usage` com `choices: []`; o deserializador Rust do Zed abortava a conexão → `src/server.ts` unificou `finish_reason: "stop"` e `usage` no mesmo chunk oficial.
 9. **Proto field not repeating (tools com type array)**: o Zed envia schemas JSON com tipos anuláveis como array (`type: ["string", "null"]`), rejeitado pelo Protobuf do Google → integrado `cleanJSONSchemaForAntigravity` em `src/translate.ts` para achatar tipos e limpar palavras-chave incompatíveis.
+10. **Imagem de tool quebrava tool calls paralelas**: a mídia de um resultado de tool entrava entre dois `functionResponse`, e o turno seguinte às `functionCall` ficava com menos respostas que chamadas (Gemini rejeita; nos modelos Claude, `fixToolResponseGrouping` do vendor reagrupava as respostas depois da imagem) → `openAIToGemini` guarda a mídia e só a emite depois do grupo inteiro de respostas.
+11. **Raciocínio no `content` sem stream**: `openAICompletion` concatenava partes `thought` na resposta com `stream: false` → vão para `reasoning_content`, como no stream.
+12. **Um modelo por effort no Zed**: o catálogo traz `-low/-medium/-high` como ids reais, sem parâmetro de effort → `src/effort.ts` agrupa as variantes num modelo com `reasoning_effort_levels` e resolve o id real por request.
 
 ## 7. Compatibilidade entre plataformas
 
