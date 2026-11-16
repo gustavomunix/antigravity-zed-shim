@@ -94,6 +94,15 @@ model list. `npm run models` queries the live catalog every time and prints
 the block to paste, so a fresh install never gets retired models. Re-run it
 when new models ship.
 
+The catalog lists one id per effort (`gemini-3.8-flash-low`, `-medium`,
+`-high`). The shim folds them into one model (`gemini-3.8-flash`) with
+`reasoning_effort_levels`, so Zed shows an effort selector. Each request
+maps `reasoning_effort` back to the matching id; without it, `high` is used
+(or the strongest level if there is no `high`). A level the model lacks
+falls to the nearest lower one. Single-variant ids such as
+`gpt-oss-120b-medium` and `-tiered` ids stay as they are. The raw ids keep
+working.
+
 
 ## Commands
 

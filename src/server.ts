@@ -19,6 +19,7 @@ import {
   registerAdvertisedModelIds,
 } from "./upstream";
 import { getLiveAuth, listAccountSummaries } from "./accounts";
+import { ensureCatalogLoaded, groupEffortVariants, resolveEffortModel } from "./effort";
 import {
   mapFinishReason,
   newCompletionId,
@@ -62,6 +63,7 @@ export interface ModelInfo {
   id: string;
   displayName?: string;
   maxTokens?: number;
+  efforts?: string[];
 }
 
 export async function fetchModelCatalog(): Promise<ModelInfo[]> {
@@ -85,7 +87,7 @@ export async function fetchModelCatalog(): Promise<ModelInfo[]> {
   const models = payload.models ?? {};
   const ids = Object.keys(models);
   registerAdvertisedModelIds(ids);
-  return ids
+  const chatModels = ids
     .filter((id) => {
       const entry = models[id];
       if (!entry || typeof entry !== "object" || entry.disabled || entry.selectable === false) return false;
@@ -95,6 +97,7 @@ export async function fetchModelCatalog(): Promise<ModelInfo[]> {
       return true;
     })
     .map((id) => ({ id, displayName: models[id].displayName, maxTokens: models[id].maxTokens }));
+  return groupEffortVariants(chatModels);
 }
 
 async function handleModels(res: ServerResponse): Promise<void> {
@@ -153,9 +156,11 @@ async function handleChat(req: IncomingMessage, res: ServerResponse): Promise<vo
   const wantStream = body.stream !== false;
   let geminiPayload: ReturnType<typeof openAIToGemini>;
   const requestedModel = typeof body.model === "string" && body.model ? body.model : "gemini-3-flash";
+  await ensureCatalogLoaded(fetchModelCatalog);
+  const upstreamModel = resolveEffortModel(requestedModel, body.reasoning_effort);
   try {
     geminiPayload = openAIToGemini({
-      model: requestedModel,
+      model: upstreamModel,
       messages: (body.messages ?? []) as never,
       stream: wantStream,
       tools: body.tools as never,
@@ -180,7 +185,7 @@ async function handleChat(req: IncomingMessage, res: ServerResponse): Promise<vo
   }
 
   const action = wantStream ? "streamGenerateContent" : "generateContent";
-  const fakeInput = `https://generativelanguage.googleapis.com/v1beta/models/${requestedModel}:${action}`;
+  const fakeInput = `https://generativelanguage.googleapis.com/v1beta/models/${upstreamModel}:${action}`;
   const baseInit: RequestInit = {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -200,7 +205,7 @@ async function handleChat(req: IncomingMessage, res: ServerResponse): Promise<vo
     return {
       url: typeof prepared.request === "string" ? prepared.request : prepared.request.toString(),
       init: prepared.init,
-      effectiveModel: prepared.effectiveModel ?? requestedModel,
+      effectiveModel: prepared.effectiveModel ?? upstreamModel,
     };
   };
 

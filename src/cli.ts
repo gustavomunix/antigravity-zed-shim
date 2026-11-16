@@ -10,6 +10,7 @@
 import { fetchModelCatalog, startServer } from "./server";
 import { runLogin } from "./login";
 import { listAccountSummaries } from "./accounts";
+import { defaultEffort, groupEffortVariants, resolveEffortModel } from "./effort";
 import {
   mapFinishReason,
   openAICompletion,
@@ -72,6 +73,9 @@ async function printModelsSnippet(): Promise<void> {
             name: m.id,
             display_name: m.displayName ?? m.id,
             max_tokens: defaultMaxTokens(m.id, m.maxTokens),
+            ...(m.efforts?.length
+              ? { reasoning_effort: defaultEffort(m.efforts), reasoning_effort_levels: m.efforts }
+              : {}),
           })),
         },
       },
@@ -181,6 +185,33 @@ function runSelfTest(): void {
   }
   assert(remoteError instanceof TranslationError && remoteError.status === 400, "remote image URL rejected");
 
+  const grouped = groupEffortVariants([
+    { id: "gemini-3.8-flash-high", displayName: "Gemini 3.8 Flash (High)", maxTokens: 1048576 },
+    { id: "gemini-3.8-flash-low", displayName: "Gemini 3.8 Flash (Low)", maxTokens: 1048576 },
+    { id: "gemini-3.8-flash-medium", displayName: "Gemini 3.8 Flash (Medium)", maxTokens: 1048576 },
+    { id: "gemini-3.8-flash-tiered", displayName: "gemini-3.8-flash-tiered" },
+    { id: "gemini-4-hydrogen-low", displayName: "Gemini 4 Hydrogen (Low)" },
+    { id: "gemini-4-hydrogen-xhigh", displayName: "Gemini 4 Hydrogen (XHigh)" },
+    { id: "gpt-oss-120b-medium", displayName: "GPT-OSS 120B (Medium)" },
+    { id: "gemini-3-flash", displayName: "Gemini 3 Flash" },
+  ]);
+  assert(
+    JSON.stringify(grouped.map((m) => m.id)) ===
+      JSON.stringify(["gemini-3.8-flash", "gemini-3.8-flash-tiered", "gemini-4-hydrogen", "gpt-oss-120b-medium", "gemini-3-flash"]),
+    `effort variants grouped, got ${grouped.map((m) => m.id).join(",")}`,
+  );
+  const flash = grouped[0];
+  assert(flash.displayName === "Gemini 3.8 Flash" && flash.maxTokens === 1048576, "grouped display name and max tokens");
+  assert(JSON.stringify(flash.efforts) === JSON.stringify(["low", "medium", "high"]), "efforts sorted by strength");
+  assert(resolveEffortModel("gemini-3.8-flash", "LOW") === "gemini-3.8-flash-low", "requested effort");
+  assert(resolveEffortModel("gemini-3.8-flash", undefined) === "gemini-3.8-flash-high", "default effort");
+  assert(resolveEffortModel("gemini-3.8-flash", "xhigh") === "gemini-3.8-flash-high", "effort clamps down");
+  assert(resolveEffortModel("gemini-4-hydrogen", "medium") === "gemini-4-hydrogen-low", "clamps to nearest lower");
+  assert(resolveEffortModel("gemini-4-hydrogen", "minimal") === "gemini-4-hydrogen-low", "below range takes lowest");
+  assert(resolveEffortModel("gemini-4-hydrogen", undefined) === "gemini-4-hydrogen-xhigh", "default without high");
+  assert(resolveEffortModel("gemini-3.8-flash-low", "high") === "gemini-3.8-flash-low", "raw variant ids pass through");
+  assert(resolveEffortModel("gpt-oss-120b-medium", "high") === "gpt-oss-120b-medium", "single variant untouched");
+
   // 2. Text envelope from the API spec.
   const text = parseAntigravityEnvelope({
     response: {
@@ -242,6 +273,14 @@ function runSelfTest(): void {
   assert(completion.choices[0].message.tool_calls.length === 1, "completion tool calls");
   assert(completion.choices[0].finish_reason === "tool_calls", "completion finish");
   assert(completion.usage.total_tokens === 11, "completion usage");
+  const thinkingCompletion = JSON.parse(
+    openAICompletion("id-2", created, "m", thinking.candidate, undefined),
+  ) as { choices: Array<{ message: { content: string | null; reasoning_content?: string } }> };
+  assert(
+    thinkingCompletion.choices[0].message.content === null &&
+      thinkingCompletion.choices[0].message.reasoning_content === "Let me think",
+    "completion keeps reasoning out of content",
+  );
 
   console.log("self-test: all checks passed");
 }
