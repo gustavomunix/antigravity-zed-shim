@@ -571,10 +571,12 @@ export function openAICompletion(
   usage: ParsedUsage | undefined,
 ): string {
   let content = "";
+  let reasoning = "";
   const toolCalls: Array<{ id: string; type: "function"; function: { name: string; arguments: string } }> = [];
   let callIndex = 0;
   for (const part of candidate?.parts ?? []) {
-    if (part.kind === "text" || part.kind === "reasoning") content += part.text;
+    if (part.kind === "text") content += part.text;
+    else if (part.kind === "reasoning") reasoning += part.text;
     else {
       callIndex += 1;
       toolCalls.push({
@@ -595,6 +597,7 @@ export function openAICompletion(
         message: {
           role: "assistant",
           content: content || null,
+          ...(reasoning ? { reasoning_content: reasoning } : {}),
           ...(toolCalls.length > 0 ? { tool_calls: toolCalls } : {}),
         },
         finish_reason: mapFinishReason(candidate?.finishReason, toolCalls.length > 0),
