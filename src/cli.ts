@@ -17,6 +17,7 @@ import {
   openAIToGemini,
   openAIUsageChunk,
   parseAntigravityEnvelope,
+  TranslationError,
 } from "./translate";
 
 const DEFAULT_PORT = 8123;
@@ -103,21 +104,82 @@ function runSelfTest(): void {
     temperature: 0.5,
     max_completion_tokens: 1024,
   });
-  // user / model(functionCall) / user(functionResponse + follow-up merged)
-  assert(gemini.contents.length === 3, `expected 3 merged contents, got ${gemini.contents.length}`);
+  // user / model(functionCall) / user(functionResponse) / user(follow-up text)
+  assert(gemini.contents.length === 4, `expected 4 contents, got ${gemini.contents.length}`);
   assert(gemini.contents[0].role === "user" && gemini.contents[0].parts[0].text === "What is 2+2?", "user text");
   assert(gemini.contents[1].role === "model", "assistant maps to model");
   assert(
     gemini.contents[2].role === "user" &&
-      gemini.contents[2].parts[0].functionResponse?.name === "calc" &&
-      gemini.contents[2].parts[1].text === "Thanks",
-    "tool result + follow-up merge into one user content",
+      gemini.contents[2].parts[0].functionResponse?.name === "calc",
+    "tool result kept in dedicated user content",
+  );
+  assert(
+    gemini.contents[3].role === "user" &&
+      gemini.contents[3].parts[0].text === "Thanks",
+    "follow-up user content preserved",
   );
   assert(gemini.systemInstruction?.parts[0].text === "Be concise.", "system instruction");
   assert(gemini.tools?.[0].functionDeclarations[0].name === "calc", "tool declarations");
   assert(gemini.toolConfig?.functionCallingConfig.mode === "AUTO", "tool choice auto");
   assert(gemini.generationConfig?.maxOutputTokens === 1024, "max tokens");
   assert(gemini.generationConfig?.temperature === 0.5, "temperature");
+
+  const multimodal = openAIToGemini({
+    model: "claude-sonnet-4-6",
+    messages: [
+      {
+        role: "user",
+        content: [
+          { type: "text", text: "Check this screenshot and doc" },
+          { type: "image_url", image_url: { url: "data:image/png;name=snap.png;base64,SNAPDATA" } },
+          { type: "file", file_data: "data:application/pdf;base64,PDFDATA", filename: "specs.pdf" },
+        ],
+      },
+      {
+        role: "assistant",
+        content: "",
+        tool_calls: [
+          { id: "call-media-1", type: "function", function: { name: "take_screenshot", arguments: "{}" } },
+          { id: "call-media-2", type: "function", function: { name: "list_files", arguments: "{}" } },
+        ],
+      },
+      {
+        role: "tool",
+        tool_call_id: "call-media-1",
+        name: "take_screenshot",
+        content: JSON.stringify([
+          { type: "text", text: "captured" },
+          { type: "file", uri: "data:image/jpeg;base64,TOOLJPEG", mime: "image/jpeg" },
+        ]),
+      },
+      { role: "tool", tool_call_id: "call-media-2", name: "list_files", content: "a.txt" },
+      { role: "user", content: "Done?" },
+    ],
+  });
+  assert(multimodal.contents.length === 4, `expected 4 multimodal contents, got ${multimodal.contents.length}`);
+  assert(multimodal.contents[0].parts.some((p) => p.inlineData?.mimeType === "image/png"), "png inlineData");
+  assert(multimodal.contents[0].parts.some((p) => p.inlineData?.mimeType === "application/pdf"), "pdf inlineData");
+  assert(
+    multimodal.contents[2].parts.length === 2 &&
+      multimodal.contents[2].parts.every((p) => p.functionResponse),
+    "parallel tool responses grouped right after the calls",
+  );
+  assert(
+    multimodal.contents[3].parts[0].inlineData?.mimeType === "image/jpeg" &&
+      multimodal.contents[3].parts[1].text === "Done?",
+    "tool media follows the response group",
+  );
+
+  let remoteError: unknown;
+  try {
+    openAIToGemini({
+      model: "gemini-3-flash",
+      messages: [{ role: "user", content: [{ type: "image_url", image_url: { url: "https://example.com/a.png" } }] }],
+    });
+  } catch (error) {
+    remoteError = error;
+  }
+  assert(remoteError instanceof TranslationError && remoteError.status === 400, "remote image URL rejected");
 
   // 2. Text envelope from the API spec.
   const text = parseAntigravityEnvelope({

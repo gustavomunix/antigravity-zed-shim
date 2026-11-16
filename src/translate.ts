@@ -22,10 +22,7 @@ export interface OpenAIToolCall {
 
 export interface OpenAIMessage {
   role: "system" | "user" | "assistant" | "tool";
-  content?: string | Array<
-    | { type: "text"; text: string }
-    | { type: "image_url"; image_url: { url: string; detail?: string } }
-  >;
+  content?: string | unknown[];
   tool_calls?: OpenAIToolCall[];
   tool_call_id?: string;
   name?: string;
@@ -77,21 +74,187 @@ export class TranslationError extends Error {
   }
 }
 
-function textOf(content: OpenAIMessage["content"]): { text: string; images: Array<{ mimeType: string; data: string }> } {
+function parseDataUrl(url: string): { mimeType: string; data: string } | null {
+  const match = /^data:([^;,]+)?(?:;[^,]*)?;base64,(.+)$/is.exec(url.trim());
+  if (!match) return null;
+  return {
+    mimeType: (match[1] || "application/octet-stream").toLowerCase(),
+    data: match[2].replace(/\s+/g, ""),
+  };
+}
+
+function mediaFromUrl(url: string): { mimeType: string; data: string } | null {
+  const parsed = parseDataUrl(url);
+  if (parsed) return parsed;
+  if (/^https?:\/\//i.test(url.trim())) {
+    throw new TranslationError(400, "Only base64 data-URL images and files are supported (got a remote URL)");
+  }
+  return null;
+}
+
+const TOOL_PART_TYPES = new Set([
+  "text",
+  "file",
+  "image",
+  "image_url",
+  "input_file",
+  "input_image",
+  "document",
+]);
+
+export function decodeToolMessageContent(content: unknown): unknown {
+  if (Array.isArray(content) && content.length === 1) {
+    const only = content[0] as { type?: unknown; text?: unknown } | null;
+    if (only?.type === "text" && typeof only.text === "string") {
+      const decoded = decodeToolMessageContent(only.text);
+      return decoded === only.text ? content : decoded;
+    }
+  }
+  if (typeof content !== "string") return content;
+  const text = content.trim();
+  if (!text.startsWith("[") || !text.endsWith("]")) return content;
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(text);
+  } catch {
+    return content;
+  }
+  if (!Array.isArray(parsed) || parsed.length === 0) return content;
+  const isPart = (part: unknown): boolean => {
+    if (!part || typeof part !== "object") return false;
+    const p = part as Record<string, unknown>;
+    if (typeof p.type !== "string" || !TOOL_PART_TYPES.has(p.type)) return false;
+    return p.type !== "text" || typeof p.text === "string";
+  };
+  return parsed.every(isPart) ? parsed : content;
+}
+
+function convertPartToMedia(part: unknown): { mimeType: string; data: string } | null {
+  if (!part || typeof part !== "object") return null;
+  const p = part as Record<string, unknown>;
+  const type = typeof p.type === "string" ? p.type : "";
+
+  if (type === "image_url") {
+    const imageUrl = p.image_url;
+    const url =
+      typeof imageUrl === "string"
+        ? imageUrl
+        : imageUrl && typeof imageUrl === "object" && typeof (imageUrl as { url?: unknown }).url === "string"
+          ? (imageUrl as { url: string }).url
+          : null;
+    if (!url) return null;
+    return mediaFromUrl(url);
+  }
+
+  if (type === "image") {
+    const source = p.source;
+    if (source && typeof source === "object") {
+      const s = source as Record<string, unknown>;
+      if (s.type === "base64" && typeof s.data === "string") {
+        const mediaType = typeof s.media_type === "string" ? s.media_type : "image/png";
+        return { mimeType: mediaType, data: s.data.replace(/\s+/g, "") };
+      }
+      if (s.type === "url" && typeof s.url === "string") {
+        return mediaFromUrl(s.url);
+      }
+    }
+    const image = p.image;
+    if (typeof image === "string") {
+      const parsed = mediaFromUrl(image);
+      if (parsed) return parsed;
+      const mediaType = typeof p.mimeType === "string" ? p.mimeType : typeof p.media_type === "string" ? p.media_type : "image/png";
+      return { mimeType: mediaType, data: image.replace(/\s+/g, "") };
+    }
+    return null;
+  }
+
+  if (type === "document") {
+    const source = p.source;
+    if (source && typeof source === "object") {
+      const s = source as Record<string, unknown>;
+      if (s.type === "base64" && typeof s.data === "string") {
+        const mediaType = typeof s.media_type === "string" ? s.media_type : "application/pdf";
+        return { mimeType: mediaType, data: s.data.replace(/\s+/g, "") };
+      }
+      if (s.type === "url" && typeof s.url === "string") {
+        return mediaFromUrl(s.url);
+      }
+    }
+    const data = typeof p.data === "string" ? p.data : null;
+    if (data) {
+      const parsed = mediaFromUrl(data);
+      if (parsed) return parsed;
+      const mediaType = typeof p.mimeType === "string" ? p.mimeType : typeof p.media_type === "string" ? p.media_type : "application/pdf";
+      return { mimeType: mediaType, data: data.replace(/\s+/g, "") };
+    }
+    return null;
+  }
+
+  if (type === "input_image") {
+    const url = typeof p.image_url === "string" ? p.image_url : null;
+    const b64 = typeof p.data === "string" ? p.data : null;
+    if (url) return mediaFromUrl(url);
+    if (b64) {
+      const mediaType = typeof p.media_type === "string" ? p.media_type : "image/png";
+      return { mimeType: mediaType, data: b64.replace(/\s+/g, "") };
+    }
+    return null;
+  }
+
+  if (type === "file" || type === "input_file") {
+    const file = (p.file && typeof p.file === "object" ? p.file : p) as Record<string, unknown>;
+    const fileData = typeof file.file_data === "string" ? file.file_data : null;
+    const url =
+      typeof file.url === "string"
+        ? file.url
+        : typeof file.uri === "string"
+          ? file.uri
+          : fileData && /^data:/i.test(fileData)
+            ? fileData
+            : null;
+    if (url) return mediaFromUrl(url);
+    const data =
+      typeof file.data === "string"
+        ? file.data
+        : fileData && !/^data:/i.test(fileData)
+          ? fileData
+          : null;
+    if (data) {
+      const parsed = mediaFromUrl(data);
+      if (parsed) return parsed;
+      const mediaType =
+        typeof file.media_type === "string"
+          ? file.media_type
+          : typeof file.mime_type === "string"
+            ? file.mime_type
+            : typeof file.mime === "string"
+              ? file.mime
+              : typeof file.filename === "string" && /\.pdf$/i.test(file.filename)
+                ? "application/pdf"
+                : "image/png";
+      return { mimeType: mediaType, data: data.replace(/\s+/g, "") };
+    }
+  }
+
+  return null;
+}
+
+function textOf(content: unknown): { text: string; images: Array<{ mimeType: string; data: string }> } {
   if (content == null) return { text: "", images: [] };
   if (typeof content === "string") return { text: content, images: [] };
+  if (!Array.isArray(content)) return { text: "", images: [] };
   let text = "";
   const images: Array<{ mimeType: string; data: string }> = [];
   for (const part of content) {
-    if (part.type === "text") {
-      text += part.text;
-    } else if (part.type === "image_url") {
-      const url = part.image_url.url;
-      const match = /^data:([^;]+);base64,(.+)$/.exec(url);
-      if (!match) {
-        throw new TranslationError(400, "Only base64 data-URL images are supported (got a remote URL)");
-      }
-      images.push({ mimeType: match[1], data: match[2] });
+    if (!part || typeof part !== "object") continue;
+    const p = part as Record<string, unknown>;
+    if (p.type === "text" && typeof p.text === "string") {
+      text += (text ? "\n" : "") + p.text;
+      continue;
+    }
+    const media = convertPartToMedia(p);
+    if (media) {
+      images.push(media);
     }
   }
   return { text, images };
@@ -108,15 +271,23 @@ export function openAIToGemini(body: OpenAIChatRequest): GeminiRequestPayload {
   const contents: GeminiContent[] = [];
   const systemTexts: string[] = [];
   const toolNameById = new Map<string, string>();
+  let pendingToolMedia: GeminiPart[] = [];
+  const flushToolMedia = (): void => {
+    if (pendingToolMedia.length === 0) return;
+    pushContent(contents, "user", ...pendingToolMedia);
+    pendingToolMedia = [];
+  };
 
   for (const message of body.messages ?? []) {
+    if (message.role !== "tool") flushToolMedia();
     if (message.role === "system") {
       const { text } = textOf(message.content);
       if (text.trim()) systemTexts.push(text);
       continue;
     }
     if (message.role === "tool") {
-      const { text } = textOf(message.content);
+      const decoded = decodeToolMessageContent(message.content);
+      const { text, images } = textOf(decoded);
       let response: Record<string, unknown>;
       try {
         const parsed: unknown = JSON.parse(text);
@@ -128,6 +299,7 @@ export function openAIToGemini(body: OpenAIChatRequest): GeminiRequestPayload {
       pushContent(contents, "user", {
         functionResponse: { name, id: message.tool_call_id, response },
       });
+      pendingToolMedia.push(...images.map((img) => ({ inlineData: img })));
       continue;
     }
     if (message.role === "assistant") {
@@ -156,6 +328,7 @@ export function openAIToGemini(body: OpenAIChatRequest): GeminiRequestPayload {
     if (text) parts.push({ text });
     if (parts.length > 0) pushContent(contents, "user", ...parts);
   }
+  flushToolMedia();
 
   if (contents.length === 0) {
     throw new TranslationError(400, "No user/model content to send");
@@ -207,10 +380,12 @@ export function openAIToGemini(body: OpenAIChatRequest): GeminiRequestPayload {
   return payload;
 }
 
-/** Appends parts, merging with the previous content when the role matches. */
+/** Appends parts, merging with the previous content when the role and functionResponse match. */
 function pushContent(contents: GeminiContent[], role: "user" | "model", ...parts: GeminiPart[]): void {
   const last = contents[contents.length - 1];
-  if (last && last.role === role) {
+  const hasFnResp = parts.some((p) => "functionResponse" in p);
+  const lastHasFnResp = last?.parts.some((p) => "functionResponse" in p) ?? false;
+  if (last && last.role === role && hasFnResp === lastHasFnResp) {
     last.parts.push(...parts);
     return;
   }

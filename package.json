@@ -21,6 +21,7 @@
     "models": "node dist/cli.js models",
     "preself-test": "npm run build",
     "self-test": "node dist/cli.js self-test",
+    "test": "npm run self-test",
     "typecheck": "tsc --noEmit",
     "postinstall": "node scripts/fetch-upstream-constants.mjs",
     "sync-vendor": "node scripts/fetch-upstream-constants.mjs"
