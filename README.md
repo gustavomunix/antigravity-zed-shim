@@ -22,7 +22,6 @@ How it works:
 - Node.js ≥ 20 (macOS, Linux, or Windows).
 - A Google account with Antigravity access.
 
-
 ## Setup
 
 ```sh
@@ -43,15 +42,15 @@ npm run models
 
 Paste the snippet into Zed's `settings.json` (`zed: open settings file` →
 `Ctrl-O` or command palette → `zed: open settings`), merging the
-`language_models.openai_compatible.antigravity` block.
+`language_models.openai_compatible.Antigravity` block.
 
 Then tell Zed the API key. The shim ignores it (short-lived Bearer tokens
 are minted per request from your stored OAuth grant), but Zed requires a
 non-empty key for `openai_compatible` providers. Either:
 
-- open Agent Settings (`agent: open settings`), find the `antigravity`
+- open Agent Settings (`agent: open settings`), find the `Antigravity`
   provider, and paste any dummy value; or
-- set the env var before launching Zed (provider id `antigravity` →
+- set the env var before launching Zed (provider `Antigravity` →
   `ANTIGRAVITY_API_KEY=dummy`).
 
 Pick an `Antigravity …` model in the Agent Panel model dropdown. Done —
@@ -79,8 +78,14 @@ Restart manually:
 
 ### Windows
 
-Copy a shortcut to `start-windows.cmd` into `shell:startup` (Win+R). It
-builds on first run and starts the proxy minimized on port 8123.
+Put a shortcut to one of these in `shell:startup` (Win+R):
+
+- `start-silent.vbs`: starts the proxy fully hidden (no window, no taskbar
+  item). Best for autostart.
+- `start-windows.cmd`: builds on first run and starts the proxy in a
+  minimized console window.
+
+`stop-windows.cmd` stops whatever is listening on port 8123.
 
 ### Models
 
@@ -89,22 +94,16 @@ model list. `npm run models` queries the live catalog every time and prints
 the block to paste, so a fresh install never gets retired models. Re-run it
 when new models ship.
 
+
 ## Commands
 
 | Command           | What it does                                              |
 | ----------------- | --------------------------------------------------------- |
 | `npm run serve`   | Build + start the proxy on `127.0.0.1:8123` (`--port N`)  |
 | `npm run login`   | Google OAuth sign-in, stores the grant locally            |
-| `npm run models`  | Print `settings.json` snippet with live model ids        |
+| `npm run models`  | Print `settings.json` snippet with live model ids         |
 | `npm run self-test` | Offline translator unit checks (no network)             |
 | `npm run typecheck` | `tsc --noEmit`                                          |
-
-### Windows Background Helpers
-
-- `start-silent.vbs`: Starts the proxy completely hidden in the background (zero windows, no taskbar item). Place a shortcut to this in `shell:startup` for automatic silent boot.
-- `stop-windows.cmd`: Stops any process running on port 8123.
-- `start-windows.cmd`: Starts the proxy in a minimized console window.
-
 
 `GET /health` returns `{status, accounts, emails}` for diagnostics.
 

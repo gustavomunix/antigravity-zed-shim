@@ -33,7 +33,7 @@ direta dos arquivos-chave + testes de handshake reais (`agy acp`,
 | Extensão Zed (TOML+RS/WASM) | Bloqueado pelo Zed | `crates/extension_cli/src/main.rs:313` rejeita `language_model_providers` ("currently unsupported"); docs listam só languages/themes/debuggers/snippets/MCP |
 | ACP oficial (`antigravity-acp` / `agy acp`) | Funciona, mas é thread externa | Dá o agente Google dentro do Zed, porém **não** coloca modelos no Zed Agent |
 | Shim local OpenAI-compatível | ✅ Adotado | Rota sancionada (`use-api-access.md#openai-compatible`): processo externo falando HTTP com o Zed |
-| Provider nativo em Rust (fork) | Funcional, mas descartado | Implementado e compilado (ver §7); descartado porque exige fork + build do editor, contra o objetivo |
+| Provider nativo em Rust (fork) | Funcional, mas descartado | Implementado e compilado (ver §10); descartado porque exige fork + build do editor, contra o objetivo |
 
 ## 4. Como o auth Antigravity funciona (descoberto no plugin)
 
@@ -72,8 +72,9 @@ Processo Node local que expõe OpenAI-compatível e traduz nos dois sentidos.
 - `src/shims/opencode-ai-plugin.d.ts` — tipos ambientes mínimos para o
   `tsc` (o import real é `import type`, apagado em runtime).
 - Distribuição: bundle único via esbuild (`dist/cli.js` + `proper-lockfile`
-  externo); `npm run serve/models/login/self-test`; `start-windows.cmd`
-  para uso no Zed instalado (atalho em `shell:startup` = autostart).
+  externo); `npm run serve/models/login/self-test`.
+- Autostart: `scripts/install-mac.sh` (LaunchAgent) e `start-windows.cmd` /
+  `start-silent.vbs` / `stop-windows.cmd` (ver §7).
 
 ## 6. Incidentes durante a implementação
 
@@ -83,7 +84,7 @@ Processo Node local que expõe OpenAI-compatível e traduz nos dois sentidos.
 3. **`proper-lockfile` (CJS com require dinâmico)** quebrava o bundle ESM → marcado como `--external`.
 4. **`write after end`** no relay SSE: `finishWithUsage()` e o driver chamavam `res.end()` duas vezes → um `finish()` só.
 5. **Usage zerado no stream**: `thoughtsTokenCount` não somado → incluído em `completion_tokens`.
-8. **Push rejeitado (GH013)**: client ID OAuth no vendor → `constants.ts` fora do git + fetch pinado no `postinstall`.
+6. **Push rejeitado (GH013)**: client ID OAuth no vendor → `constants.ts` fora do git + fetch pinado no `postinstall`.
 7. **Upstream 400 com `max_tokens` gigante**: o Zed repassa a janela de contexto configurada no `settings.json` (1M) como `max_tokens` na requisição; o Google rejeita `maxOutputTokens > 64000` → `src/translate.ts` limita a 64k (`Math.min(maxOutput, 64000)`).
 8. **"Connection interrupted" no Zed SSE**: o shim emitia chunk final só para `usage` com `choices: []`; o deserializador Rust do Zed abortava a conexão → `src/server.ts` unificou `finish_reason: "stop"` e `usage` no mesmo chunk oficial.
 9. **Proto field not repeating (tools com type array)**: o Zed envia schemas JSON com tipos anuláveis como array (`type: ["string", "null"]`), rejeitado pelo Protobuf do Google → integrado `cleanJSONSchemaForAntigravity` em `src/translate.ts` para achatar tipos e limpar palavras-chave incompatíveis.
@@ -98,8 +99,19 @@ O shim é **100% multiplataforma (macOS, Linux, Windows)**:
   - Linux: `~/.config/zed/settings.json`
   - Windows: `%APPDATA%\Zed\settings.json`
 - **Autostart**:
-  - Windows: atalho do `start-windows.cmd` em `shell:startup`.
-  - Mac/Linux: via `launchd` plist, serviço systemd de usuário ou `pm2`.
+  - Windows: atalho em `shell:startup` para `start-silent.vbs` (sem janela)
+    ou `start-windows.cmd` (console minimizado); `stop-windows.cmd` encerra
+    o processo na porta 8123. Serviço do Windows não compensa.
+  - macOS: `sh scripts/install-mac.sh` registra um LaunchAgent por usuário
+    (`dev.antigravity-zed-shim`, sem root): `RunAtLoad`, `KeepAlive` com
+    `ThrottleInterval` de 30s, prioridade de fundo (`Nice 10`, I/O baixo).
+    Logs em `~/Library/Logs/antigravity-zed-shim/`. `uninstall` remove.
+  - Linux: serviço systemd de usuário ou `pm2` (sem script pronto).
+- **Modelos**: nenhum instalador escreve no `settings.json` do Zed e não há
+  lista fixa no repo; `npm run models` consulta o catálogo ao vivo e imprime
+  o bloco, então instalação nova nunca recebe modelo desativado.
+- **Provider**: chave `Antigravity` (inicial maiúscula) em
+  `language_models.openai_compatible`; a chave dummy é pedida no Zed.
 
 ## 8. Validação executada
 
@@ -143,8 +155,10 @@ Mapeamento preservado nesta doc para reaplicação futura.
 
 - Repo publicado: `github.com/gustavomunix/antigravity-zed-shim` (público, MIT).
 - `labs/` contém só clones de referência (ignorados).
-- Uso: `start-windows.cmd` (ou `npm run serve`) + bloco `openai_compatible`
-  no `settings.json` (gerado por `npm run models`) + chave dummy no provider.
+- `package-lock.json` ignorado pelo git (não é versionado).
+- Uso: autostart da plataforma (§7) ou `npm run serve` + bloco
+  `openai_compatible` no `settings.json` (gerado por `npm run models`) +
+  chave dummy no provider.
 
 ## 12. Lições
 
